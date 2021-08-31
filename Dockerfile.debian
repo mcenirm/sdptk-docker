@@ -1,0 +1,66 @@
+# docker build --progress plain -f Dockerfile.debian -t sdptk .
+
+
+# Reused base stage
+
+FROM debian:11.0-slim AS base
+RUN apt-get update
+RUN apt-get upgrade -y
+
+
+# Downloads all the pieces
+
+FROM base AS downloader
+RUN apt-get install -y aria2
+RUN mkdir /bag
+WORKDIR /bag
+
+# Download details from https://wiki.earthdata.nasa.gov/display/DAS/Toolkit+Downloads
+ARG SDPTK_SHA256=a7ccbb33de2fddf1bafb718cd2d57b9f7ea0416cd80ccb4cf03bd1ec9080d96b
+ARG ZLIB_SHA256=c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1
+ARG JPEG_SHA256=240fd398da741669bf3c90366f58452ea59041cacc741a489b99f2f6a0bad052
+ARG SZIP_SHA256=897dda94e1d4bf88c91adeaad88c07b468b18eaf2d6125c47acac57e540904a9
+ARG HDF_SHA256=aae5a04c77b150512a888bfaa12ec526cc7f4f338285595121508081dddd9513
+ARG SDPTK_URL=https://git.earthdata.nasa.gov/rest/git-lfs/storage/DAS/sdptoolkit/${SDPTK_SHA256}
+ARG ZLIB_URL=https://git.earthdata.nasa.gov/rest/git-lfs/storage/DAS/hdfeos/${ZLIB_SHA256}
+ARG JPEG_URL=https://git.earthdata.nasa.gov/rest/git-lfs/storage/DAS/hdfeos/${JPEG_SHA256}
+ARG SZIP_URL=https://git.earthdata.nasa.gov/rest/git-lfs/storage/DAS/hdfeos5/${SZIP_SHA256}
+ARG HDF_URL=https://git.earthdata.nasa.gov/rest/git-lfs/storage/DAS/hdfeos/${HDF_SHA256}
+
+RUN aria2c --quiet --out=sdptk.tar.Z --checksum=sha-256=${SDPTK_SHA256} ${SDPTK_URL}
+RUN tar xf sdptk.tar.Z --no-same-owner
+RUN aria2c --quiet --out=zlib.tar.gz --checksum=sha-256=${ZLIB_SHA256} ${ZLIB_URL}
+RUN aria2c --quiet --out=jpeg.tar.gz --checksum=sha-256=${JPEG_SHA256} ${JPEG_URL}
+RUN aria2c --quiet --out=szip.tar.gz --checksum=sha-256=${SZIP_SHA256} ${SZIP_URL}
+RUN aria2c --quiet --out=hdf.tar.gz --checksum=sha-256=${HDF_SHA256} ${HDF_URL}
+
+
+# Final stage that builds SDPTK
+
+FROM base
+RUN apt-get install -y build-essential gfortran bison flex file
+RUN useradd --create-home --user-group sdptk
+
+ARG ZLIB_FILE=zlib-1.2.11.tar.gz
+ARG JPEG_FILE=jpegsrc.v9b.tar.gz
+ARG SZIP_FILE=szip-2.1.1.tar.gz
+ARG HDF_FILE=hdf-4.2.13.tar.gz
+
+COPY --from=downloader --chown=sdptk:sdptk /bag/TOOLKIT /usr/local/TOOLKIT
+COPY --from=downloader /bag/zlib.tar.gz /usr/local/${ZLIB_FILE}
+COPY --from=downloader /bag/jpeg.tar.gz /usr/local/${JPEG_FILE}
+COPY --from=downloader /bag/szip.tar.gz /usr/local/${SZIP_FILE}
+COPY --from=downloader /bag/hdf.tar.gz /usr/local/${HDF_FILE}
+
+RUN ls -alF /usr/local /usr/local/TOOLKIT
+
+USER sdptk
+WORKDIR /usr/local/TOOLKIT
+RUN bin/INSTALL -batch -pgshome /usr/local/TOOLKIT -fc_path /usr/bin/gfortran -f90 -log build.log || echo $? > build.failed
+RUN if [ -e build.failed ] ; then tail -n100 build.log ; exit `cat build.failed` ; fi
+
+# TODO delete
+# /usr/local/${ZLIB_FILE}
+# /usr/local/${JPEG_FILE}
+# /usr/local/${SZIP_FILE}
+# /usr/local/${HDF_FILE}
