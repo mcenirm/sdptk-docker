@@ -56,7 +56,7 @@ COPY --from=downloader /bag/hdf.tar.gz /usr/local/${HDF_FILE}
 
 USER sdptk
 WORKDIR /usr/local/TOOLKIT
-RUN if bin/INSTALL -batch -pgshome /usr/local/TOOLKIT -fc_path /usr/bin/gfortran -f90 -log build.log ; then : success ; else rc=$? ; cat >&2 build.log ; exit $rc ; fi
+RUN if bin/INSTALL -batch -pgshome /usr/local/TOOLKIT -fc_path /usr/bin/gfortran -f90 -log build.log ; then : success ; else rc=$? ; cat >&2 build.log ; ls >&2 -alFR /usr/local/TOOLKIT/jpeg ; exit $rc ; fi
 
 # TODO delete
 # /usr/local/${ZLIB_FILE}
