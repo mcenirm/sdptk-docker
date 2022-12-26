@@ -3,7 +3,7 @@
 
 # Reused base stage
 
-FROM debian:11.5-slim AS base
+FROM debian:11.6-slim AS base
 RUN apt-get update
 RUN apt-get upgrade -y
 
